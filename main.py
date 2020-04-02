@@ -33,7 +33,8 @@ for set_ in (strat_train_set, strat_test_set):
 # housing = strat_train_set.copy()
 
 # Data correlations
-# housing['rooms_per_household'] = housing['total_rooms'] / housing['households']
+# housing['rooms_per_household'] = housing['total_rooms'] /  \
+#     housing['households']
 # housing['bedrooms_per_room'] = housing['total_bedrooms'] / \
 #     housing['total_rooms']
 # housing['population_per_household'] = housing['population'] / \
