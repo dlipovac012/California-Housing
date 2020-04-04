@@ -1,115 +1,56 @@
 import numpy as np
-import pandas as pd
-from pandas.plotting import scatter_matrix
-import matplotlib.pyplot as plt
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.metrics import mean_squared_error
 
-from utils import load_housing_data
-from transformer import CombineAttributesAdder
-
-imputer = SimpleImputer(strategy='median')
-# ordinal_encoder = OrdinalEncoder()
-category_encoder = OneHotEncoder()
-
-housing = load_housing_data()
-
-housing['income_cat'] = pd.cut(housing['median_income'],
-                               bins=[0., 1.5, 3, 4.5, 6., np.inf],
-                               labels=[1, 2, 3, 4, 5])
-
-split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-for train_index, test_index in split.split(housing, housing['income_cat']):
-    strat_train_set = housing.loc[train_index]
-    strat_test_set = housing.loc[test_index]
-
-for set_ in (strat_train_set, strat_test_set):
-    set_.drop('income_cat', axis=1, inplace=True)
-
-# Copy housing
-# housing = strat_train_set.copy()
-
-# Data correlations
-# housing['rooms_per_household'] = housing['total_rooms'] /  \
-#     housing['households']
-# housing['bedrooms_per_room'] = housing['total_bedrooms'] / \
-#     housing['total_rooms']
-# housing['population_per_household'] = housing['population'] / \
-#     housing['households']
-
-# housing.plot(kind='scatter', x='longitude', y='latitude', alpha=.1,
-#              s=housing['population'] / 100, label='population',
-#              figsize=(10, 7), c='median_house_value',
-#              cmap=plt.get_cmap('jet'), colorbar=True)
-# plt.legend()
-
-# correlation_matrix = housing.corr()
-# print(correlation_matrix['median_house_value'].sort_values(ascending=False))
-
-# attributes = ['median_house_value', 'median_income',
-#               'total_rooms', 'housing_median_age']
-
-# scatter_matrix(housing[attributes], figsize=(12, 8))
-
-# housing.plot(kind='scatter', x='median_income',
-#              y='median_house_value', alpha=.1)
-
-# test_set.hist(bins=50, figsize=(20, 15))
-
-# plt.show()
-
-# housing['income_cat'].hist()
-# plt.show()
-
-"""
-    DATA TRANSFORMATION
-"""
-
-housing = strat_train_set.drop('median_house_value', axis=1)
-housing_labels = strat_train_set['median_house_value'].copy()
-
-housing_numeric_values = housing.drop('ocean_proximity', axis=1)
-imputer.fit(housing_numeric_values)
-
-housing_category_values = housing[['ocean_proximity']]
-# housing_category_encoder = ordinal_encoder.fit_transform(
-#     houseing_category_values)
-housing_category_encoder = category_encoder.fit_transform(
-    housing_category_values)
-
-# print(housing_category_encoder.toarray())
-X = imputer.transform(housing_numeric_values)
-
-attr_adder = CombineAttributesAdder(add_bedrooms_per_room=False)
-housing_extra_attribs = attr_adder.transform(housing.values)
-
-# print(housing_extra_attribs)
+from data import housing_prepared, housing_labels, housing, full_pipeline
 
 
-"""
-    PIPELINES
-"""
-
-num_pipeline = Pipeline([
-    ('imputer', SimpleImputer(strategy='median')),
-    ('attribs_adder', CombineAttributesAdder()),
-    ('std_scaler', StandardScaler())
-])
+def display_scores(scores):
+    print('Scores:', scores)
+    print('Mean:', scores.mean())
+    print('Standard deviation', scores.std())
 
 
-housing_num_tr = num_pipeline.fit_transform(housing_numeric_values)
+# train linear regression model
+# lin_regression = LinearRegression()
+# lin_regression.fit(housing_prepared, housing_labels)
+# model = DecisionTreeRegressor()
+# model.fit(housing_prepared, housing_labels)
 
-numeric_attributes = list(housing_numeric_values)
-category_attributes = ['ocean_proximity']
+param_grid = [
+    {'n_estimators': [3, 10, 30], 'max_features': [2, 4, 6, 8]},
+    {'bootstrap': [False], 'n_estimators': [3, 10], 'max_features': [2, 3, 4]}
+]
 
-full_pipeline = ColumnTransformer([
-    ('numeric', num_pipeline, numeric_attributes),
-    ('categoric', OneHotEncoder(), category_attributes)
-])
+model = RandomForestRegressor()
 
-housing_prepared = full_pipeline.fit_transform(housing)
+grid_search = GridSearchCV(
+    model, param_grid, cv=5, scoring='neg_mean_squared_error',
+    return_train_score=True)
 
-print(housing_prepared)
+grid_search.fit(housing_prepared, housing_labels)
+model.fit(housing_prepared, housing_labels)
+
+
+# Testing on some data
+some_data = housing.iloc[:5]
+some_labels = housing_labels.iloc[:5]
+some_data_prepared = full_pipeline.transform(some_data)
+
+# print("Predictions:", lin_regression.predict(some_data_prepared))
+# print("Labels:", list(some_labels))
+
+housing_predictions = model.predict(housing_prepared)
+lin_mse = mean_squared_error(housing_labels, housing_predictions)
+lin_rmse = np.sqrt(lin_mse)
+
+scores = cross_val_score(model, housing_prepared,
+                         housing_labels, scoring='neg_mean_squared_error',
+                         cv=10)
+
+model_rmse_scores = np.sqrt(-scores)
+
+# display_scores(model_rmse_scores)
